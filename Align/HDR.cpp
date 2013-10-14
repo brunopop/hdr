@@ -15,9 +15,84 @@
 #include "opencv2\imgproc\imgproc.hpp"
 #include "opencv2\highgui\highgui.hpp"
 #include "lapacke.h"
+#include <math.h>
+#include <fstream>
 
 namespace bps
 {
+	inline int round(float x)
+	{
+		return int(x < 0.0 ? std::ceil(x - 0.5f) : std::floor(x + 0.5f));
+	};
+
+	void normalize(Image& img32F)
+	{
+	};
+
+	void convert(Image& mat32F, Image& mat8UC)
+	{
+		// First, get min and max values
+		double minVal, maxVal;
+		cv::minMaxLoc(mat32F, &minVal, &maxVal);
+
+		double alpha = 255.0/(maxVal-minVal);
+		double beta = -alpha*minVal;
+
+		mat32F.convertTo(mat8UC,CV_8UC1,alpha,beta);
+	}
+
+	void convert32Fto8U(Image& img32F, Image& img8U)
+	{
+		// Dimensions
+		int height = img32F.rows;
+		int width = img32F.cols;
+		int chan = img32F.channels();
+
+		// Output image
+		img8U = Image(height, width, CV_MAKETYPE(CV_32F, chan));
+
+		// Find min and max
+		float *minVal = new float[chan];
+		float *maxVal = new float[chan];
+		// Initialize to value of first pixel in every channel
+		for (int k=0; k<chan; k++)
+		{
+			minVal[k] = img32F.ptr<float>(0)[k];
+			maxVal[k] = img32F.ptr<float>(0)[k];
+		}
+
+		for (int i=0; i<height; i++)
+		{
+			float* p = img32F.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				// For all channels
+				for (int k=0; k<chan; k++)
+				{
+					if (p[chan*j + k] > maxVal[k]) maxVal[k] = p[chan*j + k];
+					if (p[chan*j + k] < minVal[k]) minVal[k] = p[chan*j + k];
+				}
+			}
+		}
+
+		// Convert
+		for (int i=0; i<height; i++)
+		{
+			float* p = img32F.ptr<float>(i);
+			uchar* q = img8U.ptr<uchar>(i);
+			for (int j=0; j<width; j++)
+			{
+				// For all channels
+				for (int k=0; k<chan; k++)
+				{
+					q[chan*j + k] = round(255.0f * (p[chan*j + k] - minVal[k])/(maxVal[k] - minVal[k]) );
+				}
+			}
+		}
+	};
+
+#pragma region Bitmap members
+
 	Bitmap::Bitmap()
 	{
 		height = 0;
@@ -92,6 +167,10 @@ namespace bps
 		return sum;
 	};
 
+#pragma endregion
+
+#pragma region Image members
+
 	void Image::computeThreshold(void)
 	{
 		if (empty())
@@ -161,9 +240,9 @@ namespace bps
 
 	Image::Image(int height, int width, int type, int tolerance)
 	{
-		cv::Mat::Mat(height, width, type);
+		cv::Mat mat = cv::Mat(height, width, type);
+		mat.copyTo(*this);
 		this->tolerance = tolerance;
-		this->tolerance = -1;
 		exposureTime = -1;
 	};
 
@@ -292,6 +371,15 @@ namespace bps
 			}
 		}
 	};
+
+	bool Image::write(const std::string& filename)
+	{
+		return cv::imwrite(filename, *this);
+	};
+
+#pragma endregion
+
+#pragma region Align members
 
 	void Align::getExpShift(const Image& img1, const Image& img2, int shift_bits, std::vector<int>& shift_ret)
 	{
@@ -558,6 +646,8 @@ namespace bps
 
 	void Align::align(void)
 	{
+		std::cout << "Registering input images..." << std::endl;
+
 		// Vector containing the shift values in x and y between images i and i+1
 		std::vector<std::vector<int>> consecutiveShifts(images->size()-1, std::vector<int>(2,0));
 
@@ -582,10 +672,18 @@ namespace bps
 		cropImages();
 	};
 
-	void HDR::gsolve(std::vector<std::vector<uchar>>& z, std::vector<double>& g, std::vector<double>& lE)
+#pragma endregion
+
+#pragma region HDR members
+
+	void HDR::gsolve(std::vector<std::vector<uchar>>& z, std::vector<float>& g, std::vector<float>& lE)
 	{
 		if (z.size() != P || z[0].size() != N)
-			throw std::exception("Error in HDR::gsolve(): input matrix must be (NxP).");
+		{
+			std::stringstream ss;
+			ss << "Error in HDR::gsolve(): input matrix must be (NxP).\n\tz is of size " << z.size() << " but P=" << P << "\n\tz[0] is of size " << z[0].size() << " but N=" << N;
+			throw std::exception(ss.str().c_str());
+		}
 
 		int n = 256;
 		//lapack_int nlines = N*P+n+1, ncols = n+N;
@@ -651,36 +749,28 @@ namespace bps
 		g.resize(n, 0.0);
 		for (int i=0; i<n; i++)
 		{
-			g[i] = b[i];
+			g[i] = (float) b[i];
 		}
 
 		// Log film irradiance for every sample pixel
 		lE.resize(nlins-n, 0.0);
+#ifdef DEBUG
+		std::cout << "N=" << N << "\nP=" << P << "\nsize of lE=" << nlins-n << std::endl;
+#endif
 		for (int i=0; i<nlins-n; i++)
 		{
-			lE[i] = b[n+i];
+			lE[i] = (float) b[n+i];
 		}
 	};
 
-	/// <summary>
-	/// Weighting function <c>w(z)</c> to emphasize the smoothness
-	/// and fitting terms toward the middle of the curve
-	/// </summary>
-	int HDR::weight(int z)
+	inline int HDR::weight(int z)
 	{
-		if (double(z) > .5*(Zmin + Zmax))
-		{
-			return Zmax-z;
-		}
-		else
-		{
-			return z-Zmin;
-		}
+		return ( double(z) > .5*double(Zmin+Zmax) ? Zmax-z : z-Zmin );
 	};
 
 	void HDR::sample(std::vector<std::vector<uchar>>& zRed,
-		std::vector<std::vector<uchar>>& zGreen,
-		std::vector<std::vector<uchar>>& zBlue)
+					 std::vector<std::vector<uchar>>& zGreen,
+					 std::vector<std::vector<uchar>>& zBlue)
 	{
 		zRed.resize(P); zGreen.resize(P); zBlue.resize(P);
 
@@ -690,39 +780,33 @@ namespace bps
 		// For all exposures
 		for (int p=0; p<P; p++)
 		{
-			// For all pixels
-			int n = 0;
-			for (int k=0; k<height*width; k++)
+			// For all sampled pixels
+			for (int k=0; k<N; k++)
 			{
-				// Sample a pixel every step
-				if (k % step == 0)
-				{
-					// Pixel coordinates
-					int i = k / width;
-					int j = k % width;
+				// Pixel coordinates
+				int i = k*step / width;
+				int j = k*step % width;
 
-					// Pointer to the corresponding row
-					uchar* img = (*images)[p].ptr<uchar>(i);
+				// Pointer to the corresponding row
+				uchar* img = (*images)[p].ptr<uchar>(i);
 
-					// OpenCV stores images as BGR
-					zBlue[p].push_back(img[3*j + 0]);
-					zGreen[p].push_back(img[3*j + 1]);
-					zRed[p].push_back(img[3*j + 2]);
-					n++;
-				}
+				// OpenCV stores images as BGR
+				zBlue[p].push_back(img[3*j + 0]);
+				zGreen[p].push_back(img[3*j + 1]);
+				zRed[p].push_back(img[3*j + 2]);
 			} // end for k
 #ifdef DEBUG
-			std::cout << "HDR::sample(): image num " << p << ": number of samples is N=" << n << std::endl;
+			std::cout << "HDR::sample(): image num " << p << ": number of samples is " << zBlue[p].size() << std::endl;
 #endif
 		} // end for all images
 	};
 
-	HDR::HDR(std::vector<Image>* images, double lambda)
+	HDR::HDR(std::vector<Image>* images, float lambda)
 	{
 		this->images = images;
 		this->lambda = lambda;
 		P = images->size();
-		if (P <= 0) throw std::exception("Error in HDR::HDR(): there must be at least 2 photos.");
+		if (P <= 1) throw std::exception("Error in HDR::HDR(): there must be at least 2 photos.");
 
 		height = (*images)[0].rows;
 		width = (*images)[0].cols;
@@ -734,13 +818,18 @@ namespace bps
 		// we have to solve for N values of ln(Ei) and (Zmax-Zmin) samples
 		// of g. To ensure a sufficiently overdetermined system, we want
 		// N*(P-1) > (Zmax-Zmin).
-		N = (int) ceil( 2.0*double(Zmax - Zmin)/double(P-1) );
+		N = (int) ceil( 2.0*double(Zmax - Zmin)/double(P-1) );	// we know P-1 > 0
 
 		// B is the log delta t, or log shutter speed, for each image in the set
 		for (int j=0; j<P; j++)
 		{
-			B.push_back(std::log((double) images->at(j).getExposureTime()));
+			B.push_back(std::log((float) images->at(j).getExposureTime()));
 		}
+
+		// Set sentinel variables to false
+		// These sentinel variables ensure that the user calls the methods in the right order
+		responseFunctionCalculated = false;
+		radianceMapCalculated = false;
 	};
 
 	HDR::~HDR(void)
@@ -754,24 +843,382 @@ namespace bps
 		sample(zRed, zGreen, zBlue);
 
 		// Solve the objective function for the red channel
-		std::vector<double> lERed;
 		gsolve(zRed, gRed, lERed);
 
 		// Solve the objective function for the green channel
-		std::vector<double> lEGreen;
 		gsolve(zGreen, gGreen, lEGreen);
 
 		// Solve the objective function for the blue channel
-		std::vector<double> lEBlue;
 		gsolve(zBlue, gBlue, lEBlue);
+
+		// Set sentinel variable to true
+		responseFunctionCalculated = true;
+		radianceMapCalculated = false;
 	};
 
-	void HDR::radianceMap(void)
+	void HDR::radianceMap(Image& radianceMap)
 	{
-		// For all exposures
-		for (int i=0; i<P; i++)
+		if (!responseFunctionCalculated)
 		{
+			throw std::exception("Error in HDR::radianceMap(): no response function available to compute the radiance map. Call HDR::responseFunction() first.");
+		}
+
+#ifdef DEBUG
+		std::cout << "B, vector of log exposure times, has size " << B.size() << std::endl;
+#endif
+
+		// Radiance map is floating point values on 3 channels (we use double precision)
+		radianceMap = Image(height, width, CV_32FC3);
+
+		// Construct the map from the log irradiance for each channel
+		// log(E) = w(z) ( log g(Z) - log(Delta t) )/sum of w(z)
+		// For all pixels
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the corresponding row of the output image
+			float* e = radianceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				float lnEBlue = 0, lnEGreen = 0, lnERed = 0;
+				float sumBlue = 0, sumGreen = 0, sumRed = 0;
+				// For all exposures: compute the weighted sum
+				for (int k=0; k<P; k++)
+				{
+					// Pointer to the corresponding row in image k
+					uchar* p = (*images)[k].ptr<uchar>(i);
+					// Blue
+					int ZikBlue = (int) p[3*j + 0];
+					lnEBlue += weight(ZikBlue) * (gBlue[ZikBlue] - B[k]);
+					sumBlue += weight(ZikBlue);
+					// Green
+					int ZikGreen = (int) p[3*j + 1];
+					lnEGreen += weight(ZikGreen) * (gGreen[ZikGreen] - B[k]);
+					sumGreen += weight(ZikGreen);
+					// Red
+					int ZikRed = (int) p[3*j + 2];
+					lnERed += weight(ZikRed) * (gRed[ZikRed] - B[k]);
+					sumRed += weight(ZikRed);
+				}
+				try
+				{
+					// Blue
+					e[3*j + 0] = exp(lnEBlue/sumBlue);
+					// Green
+					e[3*j + 1] = exp(lnEGreen/sumGreen);
+					// Red
+					e[3*j + 2] = exp(lnERed/sumRed);
+				}
+				catch (std::exception& e)
+				{
+					std::cout << e.what() << std::endl;
+					std::cout << "\ti=" << i << " and j=" << j << " but E has " << radianceMap.rows << " rows, " << radianceMap.cols << " cols and " << radianceMap.channels() << " channels." << std::endl;
+					std::cout << "\tlnEBlue=" << lnEBlue << " and sumBlue=" << sumBlue << std::endl;
+					std::cout << "\tlnEGreen=" << lnEGreen << " and sumGreen=" << sumGreen << std::endl;
+					std::cout << "\tlnERed=" << lnERed << " and sumRed=" << sumRed << std::endl;
+				}
+			}
+		}
+
+		// Set sentinel variable to true
+		radianceMapCalculated = true;
+	};
+
+	void HDR::computeRadianceMap(Image& map)
+	{
+		std::cout << "Computing high dynamic range radiance map..." << std::endl;
+
+		// Recover the response function
+		responseFunction();
+	
+		// Build the HDR radiance map
+		radianceMap(map);
+	};
+
+#pragma endregion
+
+#pragma region Tonemap members
+
+	void Tonemap::computeLuminance(void)
+	{
+		luminanceMap = Image(height, width, CV_32F);
+		// Take luminance of first pixel as min value
+		minLum = 0.2126f * radianceMap.ptr<float>(0)[2] + 0.7152f * radianceMap.ptr<float>(0)[1] + 0.0722f * radianceMap.ptr<float>(0)[0];
+		// Set all other values to zero
+		maxLum = 0;
+		avgLum = 0;
+		logAvgLum = 0;
+		int numNotNaNPx = 0;	// number of pixels that are not NaN
+		int numLogPx = 0; // number of non-zero pixels
+
+		// For all pixels
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the ith row of the luminance map
+			float* p = luminanceMap.ptr<float>(i);
+			// Pointer to the ith row of the radiance map
+			float* e = radianceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				// Compute luminance value
+				p[j] = 0.2126f * e[3*j + 2] + 0.7152f * e[3*j + 1] + 0.0722f * e[3*j + 0];
+				// Compute min and max luminance values
+				if (p[j] > maxLum) maxLum = p[j];
+				if (p[j] < minLum) minLum = p[j];
+				// Compute average luminance avoiding NaN values
+				if (cvIsNaN(p[j]) == 0)
+				{
+					avgLum += long double(p[j]);
+					numNotNaNPx++;
+				}
+				else
+				{
+					std::cout << "Warning! Pixel location (" << i << "," << j << ") in radiance map is NaN."
+							  << "\n\tRed channel value is " << e[3*j + 2]
+							  << "\n\tGreen channel value is " << e[3*j + 1]
+							  << "\n\tBlue channel value is " << e[3*j + 0]
+							  << std::endl;;
+				}
+				// Compute log average for non-zero pixels
+				if (p[j] > 0)
+				{
+					logAvgLum += log(p[j]);
+					numLogPx++;
+				}
+			}
+		}
+		// Divide by total number of non-NaN pixels
+		avgLum /= double(numNotNaNPx);
+		// Divide by total number of non-zero pixels
+		logAvgLum = exp(logAvgLum/long double(numLogPx));
+	};
+
+	Tonemap::Tonemap(Image& radianceMap)
+	{
+		this->radianceMap = radianceMap;
+		height = radianceMap.rows;
+		width = radianceMap.cols;
+		computeLuminance();
+
+#ifdef DEBUG
+		Image luminance8U;
+		convert(luminanceMap, luminance8U);
+		luminance8U.write("debug_world_luminance.jpg");
+#endif
+	};
+
+	Tonemap::~Tonemap(void)
+	{
+	};
+
+	void Tonemap::linearDisplayLuminance(Image& dispLum)
+	{
+		dispLum = Image(height, width, CV_32F);
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the display luminance
+			float* Ld = dispLum.ptr<float>(i);
+			// Pointer to the world luminance
+			float* Lw = luminanceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				Ld[j] = (Lw[j] - minLum)/(maxLum - minLum);
+			}
 		}
 	};
+
+	void Tonemap::logarithmicDisplayLuminance(Image& dispLum)
+	{
+		dispLum = Image(height, width, CV_32F);
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the display luminance
+			float* Ld = dispLum.ptr<float>(i);
+			// Pointer to the world luminance
+			float* Lw = luminanceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				Ld[j] = log10(1 + Lw[j])/log10(1 + maxLum);
+			}
+		}
+	};
+
+	void Tonemap::exponentialDisplayLuminance(Image& dispLum)
+	{
+		if (avgLum == 0 || cvIsNaN(avgLum) != 0)
+		{
+			std::stringstream ss;
+			ss << "Error in Tonemap::exponentialDisplayLuminance(): The arithmetic average luminance cannot be zero or NaN. Average luminance is " << avgLum << ".";
+			throw std::exception(ss.str().c_str());
+		}
+
+		dispLum = Image(height, width, CV_32F);
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the display luminance
+			float* Ld = dispLum.ptr<float>(i);
+			// Pointer to the world luminance
+			float* Lw = luminanceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				Ld[j] = (float) 1 - exp(-double(Lw[j])/avgLum);	// we use the arithmetic average instead of the log average luminance
+			}
+		}
+	};
+
+	void Tonemap::reinhardGlobalDisplayLuminance(float a, Image& dispLum)
+	{
+		if (logAvgLum == 0 || cvIsNaN(logAvgLum) != 0)
+		{
+			std::stringstream ss;
+			ss << "Error in Tonemap::reinhardGlobalDisplayLuminance(): The log average luminance cannot be zero or NaN. Log average luminance is " << logAvgLum << ".";
+			throw std::exception(ss.str().c_str());
+		}
+
+		dispLum = Image(height, width, CV_32F);
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the display luminance
+			float* Ld = dispLum.ptr<float>(i);
+			// Pointer to the world luminance
+			float* Lw = luminanceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				Ld[j] = ( a/logAvgLum * Lw[j] )/( 1 + a/logAvgLum * Lw[j] );
+			}
+		}
+	};
+
+	void Tonemap::mapToDisplayBGR(Image& displayLum, Image& displayBGR, float sat_r, float sat_g, float sat_b)
+	{
+		for (int i=0; i<height; i++)
+		{
+			// Pointer to the tone mapped image
+			uchar* p = displayBGR.ptr<uchar>(i);
+			// Pointer to the display luminance
+			float* Ld = displayLum.ptr<float>(i);
+			// Pointer to the world luminance
+			float* Lw = luminanceMap.ptr<float>(i);
+			// Pointer to the radiance map
+			float* hdr = radianceMap.ptr<float>(i);
+			for (int j=0; j<width; j++)
+			{
+				// Map to [0,1]: Id = Ld * ( Iw / Lw )^saturation
+				float blue = Ld[j] * pow( (hdr[3*j + 0])/(Lw[j]), sat_b );
+				float green = Ld[j] * pow( (hdr[3*j + 1])/(Lw[j]), sat_g );
+				float red = Ld[j] * pow( (hdr[3*j + 2])/(Lw[j]), sat_r );
+
+				// Convert to 8-bit values
+				p[3*j + 0] = round(255*blue);
+				p[3*j + 1] = round(255*green);
+				p[3*j + 2] = round(255*red);
+			}
+		}
+	};
+
+	Image Tonemap::linear(float sat_r, float sat_g, float sat_b)
+	{
+		if (sat_r < 0 || sat_r > 1 || sat_g < 0 || sat_g > 1 || sat_b < 0 || sat_b > 1)
+			throw std::exception("Error in Tonemap::linear(): Saturation parameter should be 0 <= s <= 1.");
+
+		std::cout << "Computing linear tone map with saturation " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
+
+		Image displayMap = Image(height, width, CV_8UC3);
+
+		// Compute display luminance
+		Image displayLum;
+		linearDisplayLuminance(displayLum);
+
+#ifdef DEBUG
+		Image luminance8U;
+		convert(displayLum, luminance8U);
+		luminance8U.write("debug_lin_luminance.jpg");
+#endif
+
+		// Use the luminance to map back into displayable values
+		mapToDisplayBGR(displayLum, displayMap, sat_r, sat_g, sat_b);
+
+		return displayMap;
+	};
+
+	Image Tonemap::logarithmic(float sat_r, float sat_g, float sat_b)
+	{
+		if (sat_r < 0 || sat_r > 1 || sat_g < 0 || sat_g > 1 || sat_b < 0 || sat_b > 1)
+			throw std::exception("Error in Tonemap::logarithmic(): Saturation parameter should be 0 <= s <= 1.");
+
+		std::cout << "Computing logarithmic tone map with saturation " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
+
+		Image displayMap = Image(height, width, CV_8UC3);
+
+		// Compute display luminance
+		Image displayLum;
+		logarithmicDisplayLuminance(displayLum);
+
+#ifdef DEBUG
+		Image luminance8U;
+		convert(displayLum, luminance8U);
+		luminance8U.write("debug_log_luminance.jpg");
+#endif
+
+		// Use the luminance to map back into displayable values
+		mapToDisplayBGR(displayLum, displayMap, sat_r, sat_g, sat_b);
+
+		return displayMap;
+	};
+
+	Image Tonemap::exponential(float sat_r, float sat_g, float sat_b)
+	{
+		if (sat_r < 0 || sat_r > 1 || sat_g < 0 || sat_g > 1 || sat_b < 0 || sat_b > 1)
+			throw std::exception("Error in Tonemap::exponential(): Saturation parameter should be 0 <= s <= 1.");
+
+		std::cout << "Computing exponential tone map with saturations " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
+
+		Image displayMap = Image(height, width, CV_8UC3);
+
+		// Compute display luminance
+		Image displayLum;
+		exponentialDisplayLuminance(displayLum);
+
+#ifdef DEBUG
+		Image luminance8U;
+		convert(displayLum, luminance8U);
+		luminance8U.write("debug_exp_luminance.jpg");
+#endif
+
+		// Use the luminance to map back into displayable values
+		mapToDisplayBGR(displayLum, displayMap, sat_r, sat_g, sat_b);
+
+		return displayMap;
+	};
+
+	Image Tonemap::reinhardGlobal(float a, float sat_r, float sat_g, float sat_b)
+	{
+		if (sat_r < 0 || sat_r > 1 || sat_g < 0 || sat_g > 1 || sat_b < 0 || sat_b > 1)
+			throw std::exception("Error in Tonemap::reinhardGlobal(): Saturation parameter should be 0 <= s <= 1.");
+
+		std::cout << "Computing Reinhard's global tone map with saturations " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
+
+		Image displayMap = Image(height, width, CV_8UC3);
+		
+		// Compute display luminance
+		Image displayLum;
+		reinhardGlobalDisplayLuminance(a, displayLum);
+
+#ifdef DEBUG
+		Image luminance8U;
+		convert(displayLum, luminance8U);
+		luminance8U.write("debug_reinhard_global_luminance.jpg");
+#endif
+
+		// Use the luminance to map back into displayable values
+		mapToDisplayBGR(displayLum, displayMap, sat_r, sat_g, sat_b);
+
+		return displayMap;
+	};
+
+	Image Tonemap::reinhardLocal(void)
+	{
+	};
+
+#pragma endregion
 
 }

@@ -99,6 +99,8 @@ namespace bps
 
 		void computeExclusionBitmap(Bitmap& bmp) const;
 
+		bool write(const std::string& filename);
+
 	};
 
 	/// <summary>
@@ -197,10 +199,15 @@ namespace bps
 		int P;							///< Number of photographs
 		int Zmax;						///< Maximum pixel value
 		int Zmin;						///< Minimum pixel value
-		std::vector<double> B;			///< Log delta t, or log shutter speed, for each image in the set
-		std::vector<double> gRed;		///< Response function for the red channel
-		std::vector<double> gGreen;		///< Response function for the green channel
-		std::vector<double> gBlue;		///< Response function for the blue channel
+		std::vector<float> B;			///< Log delta t, or log shutter speed, for each image in the set
+		std::vector<float> gRed;		///< Response function for the red channel
+		std::vector<float> gGreen;		///< Response function for the green channel
+		std::vector<float> gBlue;		///< Response function for the blue channel
+		std::vector<float> lERed;		///< Log irradiance map for the red channel
+		std::vector<float> lEGreen;	///< Log irradiance map for the green channel
+		std::vector<float> lEBlue;		///< Log irradiance map for the blue channel
+		bool responseFunctionCalculated;///< Sentinel variable that is true if the response function g and the log irradiance log(E) have been calculated
+		bool radianceMapCalculated;		///< Sentinel variable that is true if the radiance map E has been calculated
 
 		/// <summary>
 		/// Solve the linear system that minimize the objective function O:
@@ -215,22 +222,21 @@ namespace bps
 		/// <param name="z">[in] Pixel values of pixel location number i in image j.</param>
 		/// <param name="g">[out] Log exposure corresponding to a pixel value z.</param>
 		/// <param name="lE">[out] Log film irradiance at pixel location i.</param>
-		void gsolve(std::vector<std::vector<uchar>>& z, std::vector<double>& g, std::vector<double>& lE);
+		void gsolve(std::vector<std::vector<uchar>>& z, std::vector<float>& g, std::vector<float>& lE);
 
 		/// <summary>
 		/// Weighting function <c>w(z)</c> to emphasize the smoothness
 		/// and fitting terms toward the middle of the curve
 		/// </summary>
-		int weight(int z);
+		inline int weight(int z);
 
+		/// <summary>
+		/// Samples pixel locations in the three channels of an image
+		/// across all exposures.
+		/// </summary>
 		void sample(std::vector<std::vector<uchar>>& zRed,
-			std::vector<std::vector<uchar>>& zGreen,
-			std::vector<std::vector<uchar>>& zBlue);
-
-	public:
-		HDR(std::vector<Image>* images, double lambda = LAMBDA);
-
-		~HDR(void);
+					std::vector<std::vector<uchar>>& zGreen,
+					std::vector<std::vector<uchar>>& zBlue);
 
 		/// <summary>
 		/// Recover the response function from the set
@@ -241,7 +247,162 @@ namespace bps
 		/// <summary>
 		/// Construct the radiance map.
 		/// </summary>
-		void radianceMap(void);
+		void radianceMap(Image& radianceMap);
+
+	public:
+		HDR(std::vector<Image>* images, float lambda = LAMBDA);
+
+		~HDR(void);
+
+		/// <summary>
+		/// The user can either successively call responseFunction() and radianceMap(),
+		/// or directly call computeRadianceMap() to call the intermediate methods.
+		/// </summary>
+		void computeRadianceMap(Image& radianceMap);
+	};
+
+	/// <summary>
+	/// Implementation of different tonemapping algorithms.
+	/// Each algorithm maps a high dynamic range image to
+	/// a low dynamic range image (8-bit) that can be displayed.
+	/// </summary>
+	class Tonemap
+	{
+	private:
+		Image radianceMap;	///< Radiance map to tone map
+		Image luminanceMap;	///< World luminance map of the radiance map
+		int height;			///< Dimensions of the radiance map
+		int width;			///< Dimensions of the radiance map
+		float minLum;		///< Min luminance value
+		float maxLum;		///< Max luminance value
+		long double avgLum;		///< Arithmetic average luminance
+		long double logAvgLum;	///< Log average luminance
+
+		/// <summary>
+		/// Compute the luminance map from the radiance map,
+		/// as well as the min, max, arithmetic average,
+		/// and log average luminance values.
+		/// </summary>
+		void computeLuminance(void);
+
+		/// <summary>
+		/// Compute the linear display luminance.
+		/// World luminance values are linearly mapped to display
+		/// luminance values in [0,1].
+		/// </summary>
+		/// <param name="dispLum">[out] Display luminance to be calculated.</param>
+		void linearDisplayLuminance(Image& dispLum);
+
+		/// <summary>
+		/// Compute the logarithmic display luminance.
+		/// World luminance values are mapped to display
+		/// luminance values in [0,1] as
+		///     Ld(x,y) = log10(1 + Lw(x,y))/log10(1 + maxLum)
+		/// where maxLum is the maximum world luminance value.
+		/// </summary>
+		/// <param name="dispLum">[out] Display luminance to be calculated.</param>
+		void logarithmicDisplayLuminance(Image& dispLum);
+
+		/// <summary>
+		/// Compute the exponential display luminance.
+		/// World luminance values are mapped to display
+		/// luminance values in [0,1] as
+		///     Ld(x,y) = 1 - exp(-Lw(x,y)/avgLum)
+		/// where avgLum is the arithmetic average world luminance value.
+		/// </summary>
+		/// <param name="dispLum">[out] Display luminance to be calculated.</param>
+		void exponentialDisplayLuminance(Image& dispLum);
+
+		/// <summary>
+		/// Global Reinhard operator (see Reinhard, Erik, et al.
+		/// "Photographic tone reproduction for digital images."
+		/// ACM Transactions on Graphics (TOG). Vol. 21. No. 3. ACM, 2002.)
+		/// The log average luminance is used as an approximation
+		/// of the key of the scene. The luminance is then scaled
+		/// using this key and a user-controlled parameter a such as:
+		///     L(x,y) = a/key * Lw(x,y)
+		/// where Lw(x,y) is the world luminance at pixel (x,y).
+		/// The display luminance is then obtained as
+		///     Ld(x,y) = L(x,y) / ( 1 + L(x,y) )
+		/// </summary>
+		/// <param name="a">[in] Key value.</param>
+		/// <param name="displayLum">[out] Display luminance map.</param>
+		void reinhardGlobalDisplayLuminance(float a, Image& displayLum);
+
+		/// <summary>
+		/// Reconstruct the red, green, and blue channels of the
+		/// low dynamic range, display image from the display luminance.
+		/// Each channel is reconstructed according to the formula
+		///     ldr(x,y) = Ld(x,y) * pow( hdr(x,y)/Lw(x,y) , saturation )
+		/// where Ld(x,y) is the display luminance at pixel (x,y)
+		///       Lw(x,y) is the world luminance at pixel (x,y)
+		///       hdr(x,y) is the radiance map at pixel (x,y)
+		///       saturation is a gamma correction applied to that channel.
+		/// </summary>
+		/// <param name="displayLum">[in] Display luminance.</param>
+		/// <param name="displayBGR">[out] Low dynamic range image.</param>
+		/// <param name="sat_r">[in] Saturation for the red channel.</param>
+		/// <param name="sat_g">[in] Saturation for the green channel.</param>
+		/// <param name="sat_b">[in] Saturation for the blue channel.</param>
+		void mapToDisplayBGR(Image& displayLum, Image& displayBGR, float sat_r, float sat_g, float sat_b);
+
+	public:
+		/// <summary>
+		/// Unique constructor. Takes a high dynamic range image as input
+		/// and construct the world luminance map, which will be used
+		/// by any tone mapping operator the user chooses to use.
+		/// </summary>
+		/// <param name="radianceMap">[in] High dynamic range image.</param>
+		Tonemap(Image& radianceMap);
+
+		/// <summary>
+		/// Nothing to free in the destructor.
+		/// </summary>
+		~Tonemap(void);
+
+		/// <summary>
+		/// Linear tone mapping operator
+		/// </summary>
+		/// <param name="sat_r">[in] Saturation of the red channel. Must be between 0 and 1.</param>
+		/// <param name="sat_g">[in] Saturation of the green channel. Must be between 0 and 1.</param>
+		/// <param name="sat_b">[in] Saturation of the blue channel. Must be between 0 and 1.</param>
+		Image linear(float sat_r = 1.0f, float sat_g = 1.0f, float sat_b = 1.0f);
+
+		/// <summary>
+		/// Logarithmic tone mapping operator
+		/// </summary>
+		/// <param name="sat_r">[in] Saturation of the red channel. Must be between 0 and 1.</param>
+		/// <param name="sat_g">[in] Saturation of the green channel. Must be between 0 and 1.</param>
+		/// <param name="sat_b">[in] Saturation of the blue channel. Must be between 0 and 1.</param>
+		Image logarithmic(float sat_r = 1.0f, float sat_g = 1.0f, float sat_b = 1.0f);
+
+		/// <summary>
+		/// Exponential tone mapping operator
+		/// </summary>
+		/// <param name="sat_r">[in] Saturation of the red channel. Must be between 0 and 1.</param>
+		/// <param name="sat_g">[in] Saturation of the green channel. Must be between 0 and 1.</param>
+		/// <param name="sat_b">[in] Saturation of the blue channel. Must be between 0 and 1.</param>
+		Image exponential(float sat_r = 1.0f, float sat_g = 1.0f, float sat_b = 1.0f);
+
+		/// <summary>
+		/// Global Reinhard operator (see Reinhard, Erik, et al.
+		/// "Photographic tone reproduction for digital images."
+		/// ACM Transactions on Graphics (TOG). Vol. 21. No. 3. ACM, 2002.)
+		/// The log average luminance is used as an approximation
+		/// of the key of the scene. The luminance is then scaled
+		/// using this key and a user-controlled parameter a such as:
+		///     L(x,y) = a/key * Lw(x,y)
+		/// where Lw(x,y) is the world luminance at pixel (x,y).
+		/// The display luminance is then obtained as
+		///     Ld(x,y) = L(x,y) / ( 1 + L(x,y) )
+		/// </summary>
+		/// <param name="a">[in] Key value.</param>
+		/// <param name="sat_r">[in] Saturation of the red channel. Must be between 0 and 1.</param>
+		/// <param name="sat_g">[in] Saturation of the green channel. Must be between 0 and 1.</param>
+		/// <param name="sat_b">[in] Saturation of the blue channel. Must be between 0 and 1.</param>
+		Image reinhardGlobal(float a = 0.18f, float sat_r = 1.0f, float sat_g = 1.0f, float sat_b = 1.0f);
+
+		Image reinhardLocal(void);
 	};
 
 }

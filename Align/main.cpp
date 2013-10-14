@@ -85,6 +85,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			images.push_back(Image(files[i].c_str()));
 			exifData.push_back(GetExifWithJhead(files[i].c_str()));
 			images[i].setExposureTime(exifData[i].ExposureTime);
+#ifdef DEBUG
+			std::cout << "Image " << i << " has exposure time " << exifData[i].ExposureTime << std::endl;
+#endif
 		}
 		catch (std::exception& e)
 		{
@@ -101,7 +104,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		{
 			std::stringstream ss;
 			ss << "image_" << i << ".JPG";
-			cv::imwrite(ss.str(), images[i]);
+			images[i].write(ss.str());
 		}
 	}
 	catch (std::exception& e)
@@ -111,13 +114,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Combine them to make a high dynamic range image
 	HDR hdr(&images);
+	Image radianceMap;
 	try
 	{
-		// Recover the response function
-		//hdr.responseFunction();
-	
-		// Build the HDR radiance map
-		//hdr.radianceMap();
+		hdr.computeRadianceMap(radianceMap);
 	}
 	catch (std::exception& e)
 	{
@@ -125,8 +125,57 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	// Tonemap
+	Tonemap tonemapper(radianceMap);
+	std::vector<Image> linMap, logMap, expMap, reinhardGlobal;
+	bool err = false;
+	try
+	{
+		for (int i=0; i<10; i++)
+		{
+			// Varying saturation
+			float s = (i+1)*0.1f;
+			linMap.push_back(tonemapper.linear(s, s, s));
+			logMap.push_back(tonemapper.logarithmic(s, s, s));
+			expMap.push_back(tonemapper.exponential(s, s, s));
+			// Varying key value
+			float a = (i+1)*0.1f;
+			reinhardGlobal.push_back(tonemapper.reinhardGlobal(a));
+		}
+	}
+	catch (std::exception& e)
+	{
+		err = true;
+		Warning(e.what());
+	}
 
 	// Save
+	if (!err)
+	{
+		for (int i=0; i<linMap.size(); i++)
+		{
+			std::stringstream ss;
+			ss << "output_lin_" << i+1 << ".jpg";
+			linMap[i].write(ss.str());
+		}
+		for (int i=0; i<logMap.size(); i++)
+		{
+			std::stringstream ss;
+			ss << "output_log_" << i+1 << ".jpg";
+			logMap[i].write(ss.str());
+		}
+		for (int i=0; i<expMap.size(); i++)
+		{
+			std::stringstream ss;
+			ss << "output_exp_" << i+1 << ".jpg";
+			expMap[i].write(ss.str());
+		}
+		for (int i=0; i<reinhardGlobal.size(); i++)
+		{
+			std::stringstream ss;
+			ss << "output_reinhard_global_" << i+1 << ".jpg";
+			reinhardGlobal[i].write(ss.str());
+		}
+	}
 
 	double totalTime = (double) (clock() - startTime)/CLOCKS_PER_SEC;
 	DisplayTime(totalTime);
