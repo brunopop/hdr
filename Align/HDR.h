@@ -101,6 +101,8 @@ namespace bps
 
 		bool write(const std::string& filename);
 
+		void convert32Fto8U(Image& mat8UC);
+
 	};
 
 	/// <summary>

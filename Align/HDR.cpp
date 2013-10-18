@@ -25,71 +25,55 @@ namespace bps
 		return int(x < 0.0 ? std::ceil(x - 0.5f) : std::floor(x + 0.5f));
 	};
 
-	void normalize(Image& img32F)
-	{
-	};
+	//void convert32Fto8U(Image& img32F, Image& img8U)
+	//{
+	//	// Dimensions
+	//	int height = img32F.rows;
+	//	int width = img32F.cols;
+	//	int chan = img32F.channels();
 
-	void convert(Image& mat32F, Image& mat8UC)
-	{
-		// First, get min and max values
-		double minVal, maxVal;
-		cv::minMaxLoc(mat32F, &minVal, &maxVal);
+	//	// Output image
+	//	img8U = Image(height, width, CV_MAKETYPE(CV_32F, chan));
 
-		double alpha = 255.0/(maxVal-minVal);
-		double beta = -alpha*minVal;
+	//	// Find min and max
+	//	float *minVal = new float[chan];
+	//	float *maxVal = new float[chan];
+	//	// Initialize to value of first pixel in every channel
+	//	for (int k=0; k<chan; k++)
+	//	{
+	//		minVal[k] = img32F.ptr<float>(0)[k];
+	//		maxVal[k] = img32F.ptr<float>(0)[k];
+	//	}
 
-		mat32F.convertTo(mat8UC,CV_8UC1,alpha,beta);
-	}
+	//	for (int i=0; i<height; i++)
+	//	{
+	//		float* p = img32F.ptr<float>(i);
+	//		for (int j=0; j<width; j++)
+	//		{
+	//			// For all channels
+	//			for (int k=0; k<chan; k++)
+	//			{
+	//				if (p[chan*j + k] > maxVal[k]) maxVal[k] = p[chan*j + k];
+	//				if (p[chan*j + k] < minVal[k]) minVal[k] = p[chan*j + k];
+	//			}
+	//		}
+	//	}
 
-	void convert32Fto8U(Image& img32F, Image& img8U)
-	{
-		// Dimensions
-		int height = img32F.rows;
-		int width = img32F.cols;
-		int chan = img32F.channels();
-
-		// Output image
-		img8U = Image(height, width, CV_MAKETYPE(CV_32F, chan));
-
-		// Find min and max
-		float *minVal = new float[chan];
-		float *maxVal = new float[chan];
-		// Initialize to value of first pixel in every channel
-		for (int k=0; k<chan; k++)
-		{
-			minVal[k] = img32F.ptr<float>(0)[k];
-			maxVal[k] = img32F.ptr<float>(0)[k];
-		}
-
-		for (int i=0; i<height; i++)
-		{
-			float* p = img32F.ptr<float>(i);
-			for (int j=0; j<width; j++)
-			{
-				// For all channels
-				for (int k=0; k<chan; k++)
-				{
-					if (p[chan*j + k] > maxVal[k]) maxVal[k] = p[chan*j + k];
-					if (p[chan*j + k] < minVal[k]) minVal[k] = p[chan*j + k];
-				}
-			}
-		}
-
-		// Convert
-		for (int i=0; i<height; i++)
-		{
-			float* p = img32F.ptr<float>(i);
-			uchar* q = img8U.ptr<uchar>(i);
-			for (int j=0; j<width; j++)
-			{
-				// For all channels
-				for (int k=0; k<chan; k++)
-				{
-					q[chan*j + k] = round(255.0f * (p[chan*j + k] - minVal[k])/(maxVal[k] - minVal[k]) );
-				}
-			}
-		}
-	};
+	//	// Convert
+	//	for (int i=0; i<height; i++)
+	//	{
+	//		float* p = img32F.ptr<float>(i);
+	//		uchar* q = img8U.ptr<uchar>(i);
+	//		for (int j=0; j<width; j++)
+	//		{
+	//			// For all channels
+	//			for (int k=0; k<chan; k++)
+	//			{
+	//				q[chan*j + k] = round(255.0f * (p[chan*j + k] - minVal[k])/(maxVal[k] - minVal[k]) );
+	//			}
+	//		}
+	//	}
+	//};
 
 #pragma region Bitmap members
 
@@ -375,6 +359,21 @@ namespace bps
 	bool Image::write(const std::string& filename)
 	{
 		return cv::imwrite(filename, *this);
+	};
+
+	void Image::convert32Fto8U(Image& mat8UC)
+	{
+		if (this->type() != CV_32F)
+			return;
+
+		// First, get min and max values
+		double minVal, maxVal;
+		cv::minMaxLoc(*this, &minVal, &maxVal);
+
+		double alpha = 255.0/(maxVal-minVal);
+		double beta = -alpha*minVal;
+
+		this->convertTo(mat8UC,CV_8UC1,alpha,beta);
 	};
 
 #pragma endregion
@@ -972,11 +971,13 @@ namespace bps
 				}
 				else
 				{
+#ifdef DEBUG
 					std::cout << "Warning! Pixel location (" << i << "," << j << ") in radiance map is NaN."
 							  << "\n\tRed channel value is " << e[3*j + 2]
 							  << "\n\tGreen channel value is " << e[3*j + 1]
 							  << "\n\tBlue channel value is " << e[3*j + 0]
-							  << std::endl;;
+							  << std::endl;
+#endif
 				}
 				// Compute log average for non-zero pixels
 				if (p[j] > 0)
@@ -1001,7 +1002,7 @@ namespace bps
 
 #ifdef DEBUG
 		Image luminance8U;
-		convert(luminanceMap, luminance8U);
+		luminanceMap.convert32Fto8U(luminance8U);
 		luminance8U.write("debug_world_luminance.jpg");
 #endif
 	};
@@ -1130,7 +1131,7 @@ namespace bps
 
 #ifdef DEBUG
 		Image luminance8U;
-		convert(displayLum, luminance8U);
+		displayLum.convert32Fto8U(luminance8U);
 		luminance8U.write("debug_lin_luminance.jpg");
 #endif
 
@@ -1155,7 +1156,7 @@ namespace bps
 
 #ifdef DEBUG
 		Image luminance8U;
-		convert(displayLum, luminance8U);
+		displayLum.convert32Fto8U(luminance8U);
 		luminance8U.write("debug_log_luminance.jpg");
 #endif
 
@@ -1180,7 +1181,7 @@ namespace bps
 
 #ifdef DEBUG
 		Image luminance8U;
-		convert(displayLum, luminance8U);
+		displayLum.convert32Fto8U(luminance8U);
 		luminance8U.write("debug_exp_luminance.jpg");
 #endif
 
@@ -1195,7 +1196,7 @@ namespace bps
 		if (sat_r < 0 || sat_r > 1 || sat_g < 0 || sat_g > 1 || sat_b < 0 || sat_b > 1)
 			throw std::exception("Error in Tonemap::reinhardGlobal(): Saturation parameter should be 0 <= s <= 1.");
 
-		std::cout << "Computing Reinhard's global tone map with saturations " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
+		std::cout << "Computing Reinhard's global tone map with key value " << a << " and saturations " << sat_r << ", " << sat_g << ", and " << sat_b << "..." << std::endl;
 
 		Image displayMap = Image(height, width, CV_8UC3);
 		
@@ -1205,7 +1206,7 @@ namespace bps
 
 #ifdef DEBUG
 		Image luminance8U;
-		convert(displayLum, luminance8U);
+		displayLum.convert32Fto8U(luminance8U);
 		luminance8U.write("debug_reinhard_global_luminance.jpg");
 #endif
 

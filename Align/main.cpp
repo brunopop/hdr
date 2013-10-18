@@ -31,7 +31,7 @@
 #	define DEBUG
 #endif
 
-#define DEBUG
+//#define DEBUG
 
 using namespace bps;
 
@@ -67,12 +67,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 		else
 		{
-			std::cout << files.size() << " files found." << std::endl;
+			std::cout << files.size() << " files with the extension \'JPG\' found." << std::endl;
 		}
 	}
 	else
 	{
-		std::cout << files.size() << " files found." << std::endl;
+		std::cout << files.size() << " files with the extension \'jpg\' found." << std::endl;
 	}
 
 	// Open images and read EXIF data
@@ -84,6 +84,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		{
 			images.push_back(Image(files[i].c_str()));
 			exifData.push_back(GetExifWithJhead(files[i].c_str()));
+			if (exifData[i].ExposureTime <= 0)
+			{
+				std::stringstream ss;
+				ss << "Image " << i << " has invalid exposure time.";
+				Error(ss.str());
+			}
 			images[i].setExposureTime(exifData[i].ExposureTime);
 #ifdef DEBUG
 			std::cout << "Image " << i << " has exposure time " << exifData[i].ExposureTime << std::endl;

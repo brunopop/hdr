@@ -1,0 +1,31 @@
+﻿Build started 10/18/2013 12:02:17 PM.
+     1>Project "C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Align\Align.vcxproj" on node 2 (Build target(s)).
+     1>InitializeBuildStatus:
+         Creating "Release\Align.unsuccessfulbuild" because "AlwaysCreate" was specified.
+       ClCompile:
+         All outputs are up-to-date.
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /I"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\/jhead" /I"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\/LAPACKE/include" /IC:\OpenCV243\build\include /Zi /nologo /W3 /WX- /sdl /O2 /Oi /Ot /Oy- /GL /D ADD_ /D HAVE_LAPACK_CONFIG_H /D LAPACK_COMPLEX_STRUCTURE /D WIN32 /D NDEBUG /D _CONSOLE /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Release\\" /Fd"Release\vc110.pdb" /Gd /TP /analyze- /errorReport:prompt HDR.cpp main.cpp
+         HDR.cpp
+     1>HDR.cpp(1064): warning C4244: '=' : conversion from 'long double' to 'float', possible loss of data
+     1>HDR.cpp(1087): warning C4244: '=' : conversion from 'long double' to 'float', possible loss of data
+         main.cpp
+     1>main.cpp(160): warning C4018: '<' : signed/unsigned mismatch
+     1>main.cpp(166): warning C4018: '<' : signed/unsigned mismatch
+     1>main.cpp(172): warning C4018: '<' : signed/unsigned mismatch
+     1>main.cpp(178): warning C4018: '<' : signed/unsigned mismatch
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Release\Align.exe" /INCREMENTAL:NO /NOLOGO /LIBPATH:"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\/Release" /LIBPATH:"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\/LAPACKE/lib" /LIBPATH:C:\OpenCV243\build\x86\vc10\lib jhead.lib liblapacke.lib liblapack.lib libblas.lib opencv_calib3d243.lib opencv_contrib243.lib opencv_core243.lib opencv_features2d243.lib opencv_flann243.lib opencv_gpu243.lib opencv_haartraining_engine.lib opencv_highgui243.lib opencv_imgproc243.lib opencv_legacy243.lib opencv_ml243.lib opencv_nonfree243.lib opencv_objdetect243.lib opencv_photo243.lib opencv_stitching243.lib opencv_ts243.lib opencv_video243.lib opencv_videostab243.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Release\Align.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Release\Align.lib" /MACHINE:X86 /SAFESEH Release\HDR.obj
+         Release\main.obj
+         Release\stdafx.obj
+         Generating code
+     1>c:\users\bruno\documents\visual studio 2012\projects\hdr\jhead\jhead.c(1266): warning C4715: 'GetExifWithJhead' : not all control paths return a value
+         Finished generating code
+         Align.vcxproj -> C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Release\Align.exe
+       FinalizeBuildStatus:
+         Deleting file "Release\Align.unsuccessfulbuild".
+         Touching "Release\Align.lastbuildstate".
+     1>Done Building Project "C:\Users\Bruno\Documents\Visual Studio 2012\Projects\HDR\Align\Align.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:07.64
