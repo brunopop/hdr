@@ -1,27 +1,36 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Align", "Align\Align.vcxproj", "{33FCF09F-25C6-4028-AB3C-497264539269}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jhead", "jhead\jhead.vcxproj", "{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HDR", "HDR\HDR.vcxproj", "{F2E45E4A-2840-4339-960C-7B41BD91F594}"
 	ProjectSection(ProjectDependencies) = postProject
 		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79} = {158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jhead", "jhead\jhead.vcxproj", "{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
 		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{33FCF09F-25C6-4028-AB3C-497264539269}.Debug|Win32.ActiveCfg = Debug|Win32
-		{33FCF09F-25C6-4028-AB3C-497264539269}.Debug|Win32.Build.0 = Debug|Win32
-		{33FCF09F-25C6-4028-AB3C-497264539269}.Release|Win32.ActiveCfg = Release|Win32
-		{33FCF09F-25C6-4028-AB3C-497264539269}.Release|Win32.Build.0 = Release|Win32
 		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Debug|Win32.ActiveCfg = Debug|Win32
 		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Debug|Win32.Build.0 = Debug|Win32
+		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Debug|x64.ActiveCfg = Debug|Win32
 		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Release|Win32.ActiveCfg = Release|Win32
 		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Release|Win32.Build.0 = Release|Win32
+		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Release|x64.ActiveCfg = Release|x64
+		{158DC3B2-00FD-4F83-99DD-FB9DC4ACCC79}.Release|x64.Build.0 = Release|x64
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Debug|Win32.Build.0 = Debug|Win32
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Debug|x64.ActiveCfg = Debug|x64
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Debug|x64.Build.0 = Debug|x64
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Release|Win32.ActiveCfg = Release|Win32
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Release|Win32.Build.0 = Release|Win32
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Release|x64.ActiveCfg = Release|x64
+		{F2E45E4A-2840-4339-960C-7B41BD91F594}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
