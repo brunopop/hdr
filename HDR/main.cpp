@@ -1,14 +1,50 @@
-// Author: Bruno Pop-Stefanov
-// Date: 9/15/2013
-// Description: Implementation of the following papers:
-//  - "Fast, Robust Image Registration for Compositing High
-//    Dynamic Range Photographs from Handheld Exposures" by Greg Ward
-//    (Journal of graphics tools 8.2, 2003).
-//  - "Recovering High Dynamic Range Radiance Maps from Photographs"
-//    by Paul E. Debevec and Jitendra Malik (SIGGRAPH 1997).
-//  - "Photographic Tone Reproduction for Digital Images" by
-//    Erik Reinhard et al. (ACM Transactions on Graphics 2002).
-// Using OpenCV, LAPACK, and jhead.
+/*
+	C++ HDR Copyright (C) 2013 Bruno Pop-Stefanov
+	----------------------------------------------------------------------
+
+	Disclaimer:
+	This file is part of C++ HDR.
+
+	C++ HDR is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	C++ HDR is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	
+	You should have received a copy of the GNU General Public License
+	along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+	----------------------------------------------------------------------
+
+	Date: 10/20/2013
+	Author: Bruno Pop-Stefanov (brunopop@gatech.edu)
+	----------------------------------------------------------------------
+
+	Description:
+	C++ HDR is a simple library for high dynamic range imaging. It
+	implements image registration (classes Image, Bitmap, and Align) [1],
+	HDR computation (classes Image and HDR) [2], and tone mapping (classes
+	Image and Tonemap) [3]. It uses code from OpenCV <http://opencv.org/>,
+	LAPACK <http://www.netlib.org/lapack/> and jhead
+	<http://www.sentex.net/~mwandel/jhead/>.
+	----------------------------------------------------------------------
+
+	References:
+	[1] Ward, Greg. "Fast, robust image registration for compositing
+	high dynamic range photographs from hand-held exposures." Journal
+	of graphics tools 8.2 (2003): 17-30.
+	[2] Debevec, Paul E., and Jitendra Malik. "Recovering high dynamic
+	range radiance maps from photographs." ACM SIGGRAPH 2008 classes.
+	ACM, 2008.
+	[3] Reinhard, Erik, et al. "Photographic tone reproduction for digital
+	images." ACM Transactions on Graphics (TOG). Vol. 21. No. 3. ACM, 2002.
+	[4] Reinhard, Erik, et al. High dynamic range imaging: acquisition,
+	display, and image-based lighting. Morgan Kaufmann, 2010.
+	----------------------------------------------------------------------
+*/
 
 // Win32 libraries for parsing folders
 #include <windows.h>
@@ -26,27 +62,30 @@
 // Other libraries
 #include "jhead.h"
 #include "HDR.h"
-#include "opencv2\highgui\highgui.hpp"
+#include "Image.h"
+#include "Align.h"
+#include "Tonemap.h"
 
 #ifdef _DEBUG
 #	define DEBUG
 #endif
 
-//#define DEBUG
+#define DEBUG
 
 using namespace bps;
+using namespace std;
 
-void Error(const std::string& message);
-void Warning(const std::string& message);
-void Info(const std::string& message);
-void Debug(const std::string& message);
+void Error(const string& message);
+void Warning(const string& message);
+void Info(const string& message);
+void Debug(const string& message);
 
 extern "C" ImageInfo_t GetExifWithJhead(const char * FileName);
 
 void Usage();
-DWORD ListFilesInDirectory(_TCHAR* directory_path, std::vector<std::string>& files, std::wstring desired_extension);
+DWORD ListFilesInDirectory(_TCHAR* directory_path, vector<string>& files, wstring desired_extension);
 void DisplayErrorBox(LPTSTR lpszFunction);
-std::string ConvertTCHARToString(_TCHAR* lpsztr);
+string ConvertTCHARToString(_TCHAR* lpsztr);
 void ConvertSecToHMS(double input, int* days, int* hours, int* minutes, double* seconds);
 void DisplayTime(double totalTime);
 
@@ -57,27 +96,27 @@ int _tmain(int argc, _TCHAR* argv[])
 	time_t startTime = clock();
 
 	// List files in directory
-	std::vector<std::string> files;
-	ListFilesInDirectory(argv[argc-1], files, std::wstring(_TEXT("jpg")));
+	vector<string> files;
+	ListFilesInDirectory(argv[argc-1], files, wstring(_TEXT("jpg")));
 	if (files.size() == 0)
 	{
-		ListFilesInDirectory(argv[argc-1], files, std::wstring(_TEXT("JPG")));
+		ListFilesInDirectory(argv[argc-1], files, wstring(_TEXT("JPG")));
 		if (files.size() == 0)
 		{
 			Error("No JPEG file found.");
 		}
 		else
 		{
-			std::cout << files.size() << " files with the extension \'JPG\' found." << std::endl;
+			cout << files.size() << " files with the extension \'JPG\' found." << endl;
 		}
 	}
 	else
 	{
-		std::cout << files.size() << " files with the extension \'jpg\' found." << std::endl;
+		cout << files.size() << " files with the extension \'jpg\' found." << endl;
 	}
 
 	// Open images and read EXIF data
-	std::vector<Image> images;
+	vector<Image> images;
 	for (unsigned int i=0; i<files.size(); i++)
 	{
 		try
@@ -86,16 +125,16 @@ int _tmain(int argc, _TCHAR* argv[])
 			ImageInfo_t exifData = GetExifWithJhead(files[i].c_str());
 			if (exifData.ExposureTime <= 0)
 			{
-				std::stringstream ss;
+				stringstream ss;
 				ss << "Image " << i << " has invalid exposure time.";
 				Error(ss.str());
 			}
 			images[i].setExposureTime(exifData.ExposureTime);
 #ifdef DEBUG
-			std::cout << "Image " << i << " has exposure time " << exifData.ExposureTime << std::endl;
+			cout << "Image " << i << " has exposure time " << exifData.ExposureTime << endl;
 #endif
 		}
-		catch (std::exception& e)
+		catch (exception& e)
 		{
 			Warning(e.what());
 		}
@@ -108,12 +147,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		align.align();
 		for (unsigned int i=0; i<images.size(); i++)
 		{
-			std::stringstream ss;
+			stringstream ss;
 			ss << "image_" << i << ".JPG";
 			images[i].write(ss.str());
 		}
 	}
-	catch (std::exception& e)
+	catch (exception& e)
 	{
 		Warning(e.what());
 	}
@@ -125,7 +164,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		hdr.computeRadianceMap(radianceMap);
 	}
-	catch (std::exception& e)
+	catch (exception& e)
 	{
 		Warning(e.what());
 	}
@@ -142,22 +181,22 @@ int _tmain(int argc, _TCHAR* argv[])
 			// Linear tonemapping
 			Image linear = tonemapper.linear(s, s, s);
 			// Save
-			std::stringstream ss_lin;
+			stringstream ss_lin;
 			ss_lin << "output_lin_" << i+1 << ".jpg";
 			linear.write(ss_lin.str());
 
 			// Logarithmic tonemapping
 			Image logarithmic = tonemapper.logarithmic(s, s, s);
 			// Save
-			std::stringstream ss_log;
+			stringstream ss_log;
 			ss_log << "output_log_" << i+1 << ".jpg";
 			logarithmic.write(ss_log.str());
 
 			// exponential tonemapping
 			Image exponential = tonemapper.exponential(s, s, s);
 			// Save
-			std::stringstream ss_exp;
-			ss_exp << "output_log_" << i+1 << ".jpg";
+			stringstream ss_exp;
+			ss_exp << "output_exp_" << i+1 << ".jpg";
 			exponential.write(ss_exp.str());
 
 			// Varying key value
@@ -166,12 +205,12 @@ int _tmain(int argc, _TCHAR* argv[])
 			// Global Reinhard
 			Image reinhardGlobal = tonemapper.reinhardGlobal(a);
 			// Save
-			std::stringstream ss_global;
+			stringstream ss_global;
 			ss_global << "output_reinhard_global_" << i+1 << ".jpg";
 			reinhardGlobal.write(ss_global.str());
 		}
 	}
-	catch (std::exception& e)
+	catch (exception& e)
 	{
 		Warning(e.what());
 	}
@@ -184,34 +223,34 @@ int _tmain(int argc, _TCHAR* argv[])
 
 void Usage()
 {
-	std::cerr << "Usage: HDR.exe <input directory path>" << std::endl;
+	cerr << "Usage: HDR.exe <input directory path>" << endl;
 	exit(1);
 }
 
-void Error(const std::string& message)
+void Error(const string& message)
 {
-	std::cerr << message << std::endl;
+	cerr << message << endl;
 	exit(1);
 }
 
-void Warning(const std::string& message)
+void Warning(const string& message)
 {
-	std::cout << "Warning!  " << message << std::endl;
+	cout << "Warning!  " << message << endl;
 }
 
-void Info(const std::string& message)
+void Info(const string& message)
 {
-	std::cout << message << std::endl;
+	cout << message << endl;
 }
 
-void Debug(const std::string& message)
+void Debug(const string& message)
 {
 #ifdef DEBUG
-	std::cout << message << std::endl;
+	cout << message << endl;
 #endif
 }
 
-DWORD ListFilesInDirectory(_TCHAR* directory_path, std::vector<std::string>& files, std::wstring desired_extension)
+DWORD ListFilesInDirectory(_TCHAR* directory_path, vector<string>& files, wstring desired_extension)
 {
 	WIN32_FIND_DATA ffd;
 	TCHAR szDir[MAX_PATH];
@@ -247,7 +286,7 @@ DWORD ListFilesInDirectory(_TCHAR* directory_path, std::vector<std::string>& fil
 		StringCchCat(file_path, MAX_PATH, ffd.cFileName);
 
 		// String equivalent of the file name
-		std::wstring file_name(ffd.cFileName);
+		wstring file_name(ffd.cFileName);
 
 #ifdef DEBUG_LIST
 		_tprintf(TEXT("\nDEBUG--------------------\n\tCurrent file: %s\nDEBUG--------------------\n"), file_path);
@@ -255,7 +294,7 @@ DWORD ListFilesInDirectory(_TCHAR* directory_path, std::vector<std::string>& fil
 
 		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 		{
-			if ( file_name.compare(std::wstring(_T("."))) != 0 && file_name.compare(std::wstring(_T(".."))) != 0 )
+			if ( file_name.compare(wstring(_T("."))) != 0 && file_name.compare(wstring(_T(".."))) != 0 )
 			{
 				// If it is a directory, then list files in that directory
 				// after concatenating the sub directory name with the directory path
@@ -265,7 +304,7 @@ DWORD ListFilesInDirectory(_TCHAR* directory_path, std::vector<std::string>& fil
 		else
 		{
 			// If it is a file, add it to the appropriate list with its full path
-			std::wstring extension = file_name.substr(file_name.length()-3, file_name.length());
+			wstring extension = file_name.substr(file_name.length()-3, file_name.length());
 			if (extension.compare(desired_extension) == 0)
 			{
 				files.push_back(ConvertTCHARToString(file_path));
@@ -316,13 +355,13 @@ void DisplayErrorBox(LPTSTR lpszFunction)
 	LocalFree(lpDisplayBuf);
 }
 
-std::string ConvertTCHARToString(_TCHAR* lpsztr)
+string ConvertTCHARToString(_TCHAR* lpsztr)
 {
 	size_t dummy;
 	char *cstring = (char *)malloc(MAX_PATH);
 	size_t sizeInBytes = MAX_PATH;
 	wcstombs_s(&dummy, cstring, sizeInBytes, lpsztr, sizeInBytes);
-	std::string stdstring(cstring);
+	string stdstring(cstring);
 	return stdstring;
 }
 
@@ -339,22 +378,22 @@ void DisplayTime(double totalTime)
 	int days, hours, minutes;
 	double seconds;
 	ConvertSecToHMS(totalTime, &days, &hours, &minutes, &seconds);
-	std::cout << "Done in ";
+	cout << "Done in ";
 	if (days > 0)
 	{
-		std::cout << days << "d " << hours << "h " << minutes << "m " << seconds << "s." << std::endl;
+		cout << days << "d " << hours << "h " << minutes << "m " << seconds << "s." << endl;
 	}
 	else if (hours > 0)
 	{
-		std::cout << hours << "h " << minutes << "m " << seconds << "s." << std::endl;
+		cout << hours << "h " << minutes << "m " << seconds << "s." << endl;
 	}
 	else if (minutes > 0)
 	{
-		std::cout << minutes << "m " << seconds << "s." << std::endl;
+		cout << minutes << "m " << seconds << "s." << endl;
 	}
 	else
 	{
-		std::cout << totalTime << " seconds." << std::endl;
+		cout << totalTime << " seconds." << endl;
 	}
 }
 

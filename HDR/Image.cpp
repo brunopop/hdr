@@ -119,15 +119,13 @@ namespace bps
 		exposureTime = -1;
 	};
 
-	Image::Image(int height, int width, int type, int tolerance)
+	Image::Image(int height, int width, int type, int tolerance) : cv::Mat(height, width, type)
 	{
-		cv::Mat mat = cv::Mat(height, width, type);
-		mat.copyTo(*this);
 		this->tolerance = tolerance;
 		exposureTime = -1;
 	};
 
-	Image::Image(cv::Mat& mat, int tolerance) : cv::Mat(mat)
+	Image::Image(const cv::Mat& mat, int tolerance) : cv::Mat(mat)
 	{
 		this->tolerance = tolerance;
 		computeThreshold();
@@ -141,6 +139,20 @@ namespace bps
 		this->tolerance = tolerance;
 		computeThreshold();
 		exposureTime = -1;
+	};
+
+	Image::Image(const Image& img) : cv::Mat(img)
+	{
+		exposureTime = img.exposureTime;
+		tolerance = img.tolerance;
+		threshold = img.threshold;
+	};
+
+	Image::Image(Image&& img) : cv::Mat(img)
+	{
+		exposureTime = img.exposureTime;
+		tolerance = img.tolerance;
+		threshold = img.threshold;
 	};
 
 	Image::~Image(void)
@@ -253,12 +265,12 @@ namespace bps
 		}
 	};
 
-	bool Image::write(const std::string& filename)
+	bool Image::write(const std::string& filename) const
 	{
 		return cv::imwrite(filename, *this);
 	};
 
-	void Image::convert32Fto8U(Image& mat8UC)
+	void Image::convert32Fto8U(Image& mat8UC) const
 	{
 		if (this->type() != CV_32F)
 			return;

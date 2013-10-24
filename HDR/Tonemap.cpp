@@ -337,5 +337,6 @@ namespace bps
 
 	Image Tonemap::reinhardLocal(void)
 	{
+		return Image();
 	};
 }

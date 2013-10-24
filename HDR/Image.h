@@ -48,7 +48,7 @@
 
 #pragma once
 
-#include "opencv2/highgui/highgui.hpp"
+#include <opencv2/highgui/highgui.hpp>
 
 #define TOLERANCE 6
 
@@ -95,7 +95,7 @@ namespace bps
 		/// </summary>
 		/// <param name="mat">[in] Mat to copy</param>
 		/// <param name="tolerance">[in] Tolerance value</param>
-		Image(cv::Mat& mat, int tolerance = TOLERANCE);
+		Image(const cv::Mat& mat, int tolerance = TOLERANCE);
 
 		/// <summary>
 		/// Construct an Image from a file. Wraps OpenCV's imread function.
@@ -108,6 +108,16 @@ namespace bps
 		/// </param>
 		/// <param name="tolerance">[in] Tolerance value</param>
 		Image(const std::string& path, int flags = 1, int tolerance = TOLERANCE);
+
+		/// <summary>
+		/// Copy constructor.
+		/// </summary>
+		Image(const Image& img);
+
+		/// <summary>
+		/// Move constructor.
+		/// </summary>
+		Image(Image&& img);
 
 		~Image(void);
 
@@ -178,13 +188,13 @@ namespace bps
 		/// </summary>
 		/// <param name="filename">[in] Path to the file</param>
 		/// <return>True is operation is successful, false otherwise</return>
-		bool write(const std::string& filename);
+		bool write(const std::string& filename) const;
 
 		/// <summary>
 		/// Converts the image into an 8-bit equivalent,
 		/// if the image is 16-bit float and 1 channel.
 		/// </summary>
 		/// <param name="mat8UC">[out] 8-bit 1-channel converted image</param>
-		void convert32Fto8U(Image& mat8UC);
+		void convert32Fto8U(Image& mat8UC) const;
 	};
 }
